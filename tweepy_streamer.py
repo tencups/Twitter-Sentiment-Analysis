@@ -4,9 +4,13 @@ from tweepy import Cursor
 from tweepy import OAuthHandler
 from tweepy import Stream
 
+from textblob import TextBlob
+
 import twitter_credentials
 import numpy as np
 import pandas as pd
+import re
+import matplotlib.pyplot as plt
 
 class TwitterClient():
     def __init__(self, twitter_user = None):
@@ -84,8 +88,21 @@ class TweetAnalyzer():
     """
     Functionality for analyzing and categorizing content from tweetself.
     """
+    def clean_tweet(self,tweet):
+        # remove special characters and hyperlinks
+        return ' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t])|(\w+:\/\/\S+)", " ", tweet).split())
+
+    def analyze_sentiment(self,tweet):
+        analysis = TextBlob(self.clean_tweet(tweet))
+        if analysis.sentiment.polarity > 0:
+            return 1 # positive
+        elif analysis.sentiment.polarity ==0:
+            return 0 # neutral
+        else:
+            return -1 #negative
+
     def tweets_to_data_frame(self,tweets):
-        df = pd.DataFrame(data=[tweet.text for tweet in tweets], columns=["Tweets"])
+        df = pd.DataFrame(data=[tweet.text for tweet in tweets], columns=["tweets"])
         df['id'] = np.array([tweet.id for tweet in tweets])
         df['length'] = np.array([len(tweet.text) for tweet in tweets])
         df['date'] = np.array([tweet.created_at for tweet in tweets])
@@ -93,23 +110,33 @@ class TweetAnalyzer():
         df['likes'] = np.array([tweet.favorite_count for tweet in tweets])
         df['retweets']= np.array([tweet.retweet_count for tweet in tweets])
 
+
         return df
 if __name__ == "__main__":
     twitter_client = TwitterClient()
     tweet_analyzer = TweetAnalyzer()
     api = twitter_client.get_twitter_client_api()
 
-    tweets = api.user_timeline(screen_name="realDonaldTrump",count=20)
+    tweets = api.user_timeline(screen_name="realDonaldTrump",count=200)
     df = tweet_analyzer.tweets_to_data_frame(tweets)
+    df['sentiment'] = np.array([tweet_analyzer.analyze_sentiment(tweet) for tweet in df['tweets']])
     print(df.head(10))
-    #print(tweets[0].retweet_count)
-    #print(dir(tweets[0]))
+    # Average length of tweets
+    #print(np.mean(df['length']))
+    # Get the number of likes for the most liked tweet
+    #print(np.max(df['likes']))
+    # Get the number of retweets for the most retweeted tweet
+    #print(np.max(df['retweets']))
+    # Time Series
+    #time_likes = pd.Series(data=df['likes'].values,index=df['date'])
+    #time_likes.plot(figsize=(16,4),color='b')
+    #plt.show()
+    #time_retweets = pd.Series(data=df['retweets'].values,index=df['date'])
+    #time_rewteets.plot(figsize=(16,4),color='b')
+    #plt.show()
 
-
-    #hash_tag_list = ['donald trump','barack obama','bernie sanders','hillary clinton']
-    #fetched_tweets_filename = 'tweets.json'
-    #twitter_client = TwitterClient('pycon')
-    #print(twitter_client.get_user_timeline_tweets(1))
-
-    #twitter_streamer = TwitterStreamer()
-    #twitter_streamer.stream_tweet(fetched_tweets_filename,hash_tag_list)
+    time_likes = pd.Series(data=df['likes'].values,index=df['date'])
+    time_likes.plot(figsize=(16,4),label='likes',legend=True)
+    time_retweets = pd.Series(data=df['retweets'].values,index=df['date'])
+    time_retweets.plot(figsize=(16,4),label='retweets',legend=True)
+    plt.show()
